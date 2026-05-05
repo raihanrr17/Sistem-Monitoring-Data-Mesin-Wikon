@@ -1,0 +1,109 @@
+# To better understand this file read this:
+# https://docs.ionos.space/docs/github-actions-customization/
+
+name: "Deploy Now: Execute Build"
+
+on:
+  workflow_call:
+    inputs:
+      site-url:
+        required: true
+        type: string
+      branch-id:
+        required: true
+        type: string
+
+env:
+  DEPLOYMENT_FOLDER: ./
+
+jobs:
+# Please do not rename this job
+  build-project:
+    name: build Sistem-Monitoring-Data-Mesin-Wikon
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # if you add permissions here this needs to be done in the Sistem-Monitoring-Data-Mesin-Wikon-orchestration.yaml as well
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Render templates
+        uses: ionos-deploy-now/template-renderer-action@v2
+        id: template
+        with:
+          input-directory: .deploy-now/Sistem-Monitoring-Data-Mesin-Wikon
+          output-directory: ${{ env.DEPLOYMENT_FOLDER }}
+          intermediate-data-file: ${{ env.DEPLOYMENT_FOLDER }}/.template-renderer-data
+
+      - name: Setup composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:2
+
+      - name: Run composer install
+        env:
+          APP_DEBUG: false
+          APP_ENV: production
+          APP_NAME: Dashboard Availability Mesin
+          APP_URL: https://datamesinwikon.com
+          CACHE_STORE: database
+          DB_CONNECTION: mysql
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: 3306
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          SESSION_DRIVER: database
+        run: composer install --optimize-autoloader --no-dev
+
+      - name: Build PHP assets
+        env:
+          APP_DEBUG: false
+          APP_ENV: production
+          APP_NAME: Dashboard Availability Mesin
+          APP_URL: https://datamesinwikon.com
+          CACHE_STORE: database
+          DB_CONNECTION: mysql
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: 3306
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          SESSION_DRIVER: database
+        run: |
+          php artisan key:generate --force -n
+          php artisan migrate --force
+          php artisan db:seed --force
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          php artisan storage:link
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: v22.x
+
+      - name: Build Node assets
+        env:
+          CI: true
+          SITE_URL: ${{ inputs.site-url }}
+        run: |
+          npm install
+          npm run build
+
+# Please do not touch the following action
+      - name: Store deployment content
+        uses: ionos-deploy-now/artifact-action@v1
+        with:
+          api-key: ${{ secrets.IONOS_API_KEY }}
+          service-host: api-us.ionos.space
+          project-id: 8dcff924-5c1a-41e4-b308-42c8e7d56773
+          branch-id: ${{ inputs.branch-id }}
+          version: ${{ github.sha }}
+          folder: ${{ env.DEPLOYMENT_FOLDER }}
+          config-file: .deploy-now/Sistem-Monitoring-Data-Mesin-Wikon/config.yaml
+          action: upload
