@@ -138,10 +138,7 @@
         <a href="/admin" class="menu-link">Dashboard</a>
         <a href="/admin-input" class="menu-link">Input Data</a>
         <a href="/admin-reports" class="menu-link active">Laporan</a>
-        <form method="POST" action="{{ route('logout') }}" style="margin:0; padding:0;">
-    @csrf
-    <button type="submit" class="menu-link" style="background:none; border:none; cursor:pointer; font-family:inherit; font-size:inherit; display:block; width:100%;">Logout</button>
-</form>
+        <a href="/" class="menu-link">Logout</a>
       </nav>
     </aside>
 
@@ -173,7 +170,7 @@
             <label>Tahun</label>
             <select id="yearFilter">
               <option value="">Semua Tahun</option>
-              <option>2024</option><option>2025</option><option>2026</option>
+              <option>2025</option><option>2026</option>
             </select>
           </div>
           <div class="form-group">
@@ -301,8 +298,8 @@
 
           renderTable();
         })
-        .catch(() => {
-          container.innerHTML = `<p style="text-align:center; color:red;">Gagal menarik data. Pastikan XAMPP menyala.</p>`;
+        .catch(error => {
+          container.innerHTML = `<p style="text-align:center; color:red;">Gagal memuat data: ${error.message}<br><small>Coba refresh halaman. Jika masalah berlanjut, hubungi admin.</small></p>`;
         });
     }
 
@@ -375,8 +372,9 @@
             plantData.forEach(item => {
               yearHtml += `
                 <tr>
-                  <td data-label="Aksi">
-                    <button onclick="bukaModalEdit(${item.id})" style="background:#f59e0b; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold;">Edit</button>
+                  <td data-label="Aksi" style="display:flex;gap:6px;align-items:center;">
+                    <button onclick="bukaModalEdit(${item.id})" style="background:#f59e0b;color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">Edit</button>
+                    <button onclick="hapusData(${item.id}, '${item.machine}')" style="background:#dc2626;color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:bold;">Hapus</button>
                   </td>
                   <td data-label="Bulan">${item.month}</td>
                   <td data-label="Tahun">${item.year}</td>
@@ -473,25 +471,27 @@
 
       fetch(`/api/machines/${id}`, {
         method: 'PUT',
-        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
         },
         body: JSON.stringify(updated)
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) return res.text().then(t => { throw new Error('HTTP ' + res.status + ': ' + t.substring(0, 200)); });
+        return res.json();
+      })
       .then(data => {
         if (data.status === 'success') {
-          alert("Berhasil diupdate!");
+          alert("Data berhasil diupdate!");
           closeModal();
           fetchLaporan();
         } else {
-          alert("Gagal update: " + (data.message || "Unknown error"));
+          alert("Gagal update:\n" + (data.message || JSON.stringify(data.errors || {})));
         }
       })
-      .catch(() => {
-        alert("Terjadi kesalahan saat menyimpan data.");
+      .catch(error => {
+        alert("Terjadi kesalahan saat menyimpan data:\n" + error.message + "\n\nCoba refresh dan ulangi.");
       })
       .finally(() => {
         btn.textContent = "Simpan Ubahan";
@@ -508,6 +508,40 @@
       document.getElementById("searchFilter").value = "";
       renderTable();
     });
+
+
+    // ========================================================
+    // HAPUS DATA
+    // ========================================================
+    function hapusData(id, namaMesin) {
+      if (!confirm('Yakin ingin menghapus data mesin ' + namaMesin + '?\n\nData yang dihapus tidak bisa dikembalikan.')) return;
+
+      const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+      fetch('/api/machines/' + id, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrf
+        }
+      })
+      .then(res => {
+        if (!res.ok) return res.text().then(t => { throw new Error('HTTP ' + res.status + ': ' + t.substring(0, 200)); });
+        return res.json();
+      })
+      .then(data => {
+        if (data.status === 'success') {
+          alert('Data mesin ' + namaMesin + ' berhasil dihapus.');
+          fetchLaporan();
+        } else {
+          alert('Gagal menghapus:\n' + (data.message || 'Unknown error'));
+        }
+      })
+      .catch(error => {
+        alert('Terjadi kesalahan saat menghapus data:\n' + error.message + '\n\nCoba refresh dan ulangi.');
+      });
+    }
 
     fetchLaporan();
   </script>
